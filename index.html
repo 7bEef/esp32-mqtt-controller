@@ -2,12 +2,12 @@
 <html>
 <head>
     <title>ESP32 MQTT Controller</title>
-    <!-- This line imports the official MQTT.js library, which makes talking to HiveMQ easy -->
+    <!-- This line imports the official MQTT.js library -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         body { font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #f4f4f4; }
         h1 { color: #333; }
-        #status { color: #555; font-style: italic; } 
+        #status { color: #555; font-style: italic; font-size: 18px; }
         .btn { padding: 20px 40px; font-size: 24px; cursor: pointer; border: none; color: white; border-radius: 8px; margin: 10px; }
         #btn-on { background-color: #4CAF50; } /* Green */
         #btn-off { background-color: #f44336; } /* Red */
@@ -16,43 +16,46 @@
 <body>
 
     <h1>ESP32 LED Control</h1>
-    <p id="status">Connecting to MQTT Broker...</p> 
+    <p id="status">Connecting to MQTT Broker...</p>
     <button id="btn-on" class="btn">Turn ON</button>
     <button id="btn-off" class="btn">Turn OFF</button>
 
 <script>
-    // ====================================================================
-    // ---           1. PASTE YOUR HIVEMQ DETAILS HERE                ---
-    // ====================================================================
+    // --- Configuration Section ---
     const options = {
-        host: 'c09dd17c3820439c8e3313d2b9acf071.s1.eu.hivemq.cloud:8884/mqtt', // e.g., 'your-id.s1.eu.hivemq.cloud'
+        host: 'c09dd17c3820439c8e3313d2b9acf071.s1.eu.hivemq.cloud',
         port: 8884,
-        protocol: 'wss', // Secure WebSocket
-        username: '8Beef',
-        password: 'Emir.3169'
+        protocol: 'wss',
+        username: '8Beef', // Your confirmed username
+        password: 'Emir.3169'  // Your confirmed password
     };
     
-    const ledCommandTopic = 'esp32/led/command'; // You can change this topic if you want
-    // ====================================================================
+    const ledCommandTopic = 'esp32/led/command';
+    // --- End of Configuration ---
 
 
-    // --- Don't need to edit below this line ---
-    console.log("Connecting to MQTT broker with options:", options);
+    // --- Application Logic (No need to edit) ---
+    console.log("Attempting to connect with options:", options);
     const client = mqtt.connect(options);
 
+    const statusElement = document.getElementById('status');
+
     client.on('connect', function () {
-        const statusP = document.getElementById('status');
-        statusP.textContent = 'Connected! Ready to send commands.';
-        statusP.style.color = 'green';
+        statusElement.textContent = 'Connected! Ready to send commands.';
+        statusElement.style.color = 'green';
         console.log('Successfully connected to HiveMQ Broker!');
     });
 
     client.on('error', function (err) {
-        const statusP = document.getElementById('status');
-        statusP.textContent = 'Error: Could not connect to broker. Check console for details.';
-        statusP.style.color = 'red';
+        statusElement.textContent = 'Error: Could not connect to broker. Check console for details.';
+        statusElement.style.color = 'red';
         console.error('Connection error: ', err);
         client.end();
+    });
+    
+    client.on('reconnect', function () {
+        statusElement.textContent = 'Reconnecting...';
+        statusElement.style.color = 'orange';
     });
 
     document.getElementById('btn-on').addEventListener('click', function () {
@@ -61,6 +64,7 @@
             client.publish(ledCommandTopic, 'ON', { qos: 1 });
         } else {
             console.error("Client not connected, cannot publish.");
+            alert("Error: Not connected to the MQTT broker.");
         }
     });
 
@@ -70,6 +74,7 @@
             client.publish(ledCommandTopic, 'OFF', { qos: 1 });
         } else {
             console.error("Client not connected, cannot publish.");
+            alert("Error: Not connected to the MQTT broker.");
         }
     });
 
