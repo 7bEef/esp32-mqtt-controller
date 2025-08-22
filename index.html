@@ -61,7 +61,7 @@
 
     document.getElementById('btn-on').addEventListener('click', function () {
         if (client.connected) {
-            const = onCommand {
+            const onCommand = {
             "command":"ON"
             };
             console.log(`Publishing 'ON' to topic: ${ledCommandTopic}`);
@@ -75,7 +75,7 @@
 
     document.getElementById('btn-off').addEventListener('click', function () {
         if (client.connected) {
-            const = offCommand {
+            const offCommand = {
             "command":"OFF"
             };
             console.log(`Publishing 'OFF' to topic: ${ledCommandTopic}`);
