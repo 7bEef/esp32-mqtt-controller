@@ -61,8 +61,12 @@
 
     document.getElementById('btn-on').addEventListener('click', function () {
         if (client.connected) {
+            const onCommand {
+            "command":"ON"
+            };
             console.log(`Publishing 'ON' to topic: ${ledCommandTopic}`);
-            client.publish(ledCommandTopic, 'ON', { qos: 1 });
+            
+            client.publish(ledCommandTopic, JSON.stringify(onCommand), { qos: 1 });
         } else {
             console.error("Client not connected, cannot publish.");
             alert("Error: Not connected to the MQTT broker.");
@@ -71,8 +75,12 @@
 
     document.getElementById('btn-off').addEventListener('click', function () {
         if (client.connected) {
+            const offCommand {
+            "command":"OFF"
+            };
             console.log(`Publishing 'OFF' to topic: ${ledCommandTopic}`);
-            client.publish(ledCommandTopic, 'OFF', { qos: 1 });
+            
+            client.publish(ledCommandTopic, JSON.stringify(offCommand), { qos: 1 });
         } else {
             console.error("Client not connected, cannot publish.");
             alert("Error: Not connected to the MQTT broker.");
