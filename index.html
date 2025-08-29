@@ -17,165 +17,73 @@
 
     <h1>ESP32 LED Control</h1>
     <p id="status">Connecting to MQTT Broker...</p>
-    <button id="btn-on" class="btn" disabled>Turn ON</button>
-    <button id="btn-off" class="btn" disabled>Turn OFF</button>
+    <button id="btn-on" class="btn">Turn ON</button>
+    <button id="btn-off" class="btn">Turn OFF</button>
 
 <script>
-    
+    // --- Configuration Section ---
     const options = {
         host: 'c09dd17c3820439c8e3313d2b9acf071.s1.eu.hivemq.cloud',
         port: 8884,
         protocol: 'wss',
         username: 'esp32device',
-        password: 'Password1', 
-        path: '/mqtt'          
+        password: 'Password1', // Don't forget the comma on this line!
+        path: '/mqtt'          // Add this new line
     };
     
     const ledCommandTopic = 'esp32/led/command';
-    const ledAckTopic = 'esp32/led/ack'; 
- 
+    // --- End of Configuration ---
+
+
+    // --- Application Logic (No need to edit) ---
     console.log("Attempting to connect with options:", options);
     const client = mqtt.connect(options);
 
     const statusElement = document.getElementById('status');
-    const btnOn = document.getElementById('btn-on');
-    const btnOff = document.getElementById('btn-off');
-
-    let awaitingAck = true;           
-    let ackTimeoutId = null;          
-
-    function setButtonsEnabled(enabled) {
-        btnOn.disabled = !enabled;
-        btnOff.disabled = !enabled;
-        btnOn.style.opacity = enabled ? '1' : '0.6';
-        btnOff.style.opacity = enabled ? '1' : '0.6';
-        btnOn.style.cursor = enabled ? 'pointer' : 'not-allowed';
-        btnOff.style.cursor = enabled ? 'pointer' : 'not-allowed';
-    }
 
     client.on('connect', function () {
+        statusElement.textContent = 'Connected! Ready to send commands.';
+        statusElement.style.color = 'green';
         console.log('Successfully connected to HiveMQ Broker!');
-        statusElement.textContent = 'Connected to broker. Waiting ESP ACK...';
-        statusElement.style.color = 'orange';
-        
-        client.subscribe(ledAckTopic, { qos: 1 }, function (err) {
-            if (err) {
-                console.error('Subscribe error:', err);
-                statusElement.textContent = 'Subscribed failed, retrying...';
-                statusElement.style.color = 'red';
-                alert('Abonelik hatası: ACK topiğine abone olunamadı. Lütfen bağlantıyı kontrol edin.');
-            } else {
-                console.log('Subscribed to', ledAckTopic);
-            }
-        });
-        
-        awaitingAck = true;
-        setButtonsEnabled(false);
     });
 
     client.on('error', function (err) {
         statusElement.textContent = 'Error: Could not connect to broker. Check console for details.';
         statusElement.style.color = 'red';
         console.error('Connection error: ', err);
-        alert('Broker bağlantı hatası: Lütfen internet/broker ayarlarını kontrol edin.');
         client.end();
     });
     
     client.on('reconnect', function () {
         statusElement.textContent = 'Reconnecting...';
         statusElement.style.color = 'orange';
-        alert('Yeniden bağlanılıyor, lütfen bekleyin...');
-        awaitingAck = true;
-        setButtonsEnabled(false);
-    });
-
-    client.on('message', function (topic, payloadBuffer) {
-        if (topic !== ledAckTopic) return;
-        let payloadText = '';
-        try {
-            payloadText = payloadBuffer.toString();
-        } catch (e) {
-            console.warn('Payload toString error', e);
-        }
-        
-        let isAck = false;
-        try {
-            const json = JSON.parse(payloadText);
-            if (json && (json.status === 'READY' || json.status === 'ACK' || json.ready === true)) {
-                isAck = true;
-            }
-        } catch (_) {
-           
-            const t = (payloadText || '').trim().toUpperCase();
-            if (t === 'READY' || t === 'ACK' || t === 'OK' || t === 'ONLINE') {
-                isAck = true;
-            }
-        }
-
-        if (isAck) {
-            awaitingAck = false;
-            if (ackTimeoutId) {
-                clearTimeout(ackTimeoutId);
-                ackTimeoutId = null;
-            }
-            setButtonsEnabled(true);
-            statusElement.textContent = 'ESP ready. You can control the LED.';
-            statusElement.style.color = 'green';
-        }
     });
 
     document.getElementById('btn-on').addEventListener('click', function () {
-        if (client.connected && !awaitingAck) {
+        if (client.connected) {
             const onCommand = {
             "command":"ON"
             };
             console.log(`Publishing 'ON' to topic: ${ledCommandTopic}`);
             
             client.publish(ledCommandTopic, JSON.stringify(onCommand), { qos: 1 });
-            
-            awaitingAck = true;
-            setButtonsEnabled(false);
-            statusElement.textContent = 'Waiting ESP response (ACK) for ON...';
-            statusElement.style.color = 'orange';
-            
-            if (ackTimeoutId) clearTimeout(ackTimeoutId);
-            ackTimeoutId = setTimeout(function () {
-                if (awaitingAck) {
-                    statusElement.textContent = 'No response from ESP yet. Please check device.';
-                    statusElement.style.color = 'red';
-                    alert('Zaman aşımı: ESP’den yanıt gelmedi (ON). Lütfen cihazı kontrol edin.');
-                }
-            }, 7000);
         } else {
             console.error("Client not connected, cannot publish.");
-            alert("Hata: Bağlı değil veya ESP yanıtı bekleniyor.");
+            alert("Error: Not connected to the MQTT broker.");
         }
     });
 
     document.getElementById('btn-off').addEventListener('click', function () {
-        if (client.connected && !awaitingAck) {
+        if (client.connected) {
             const offCommand = {
             "command":"OFF"
             };
             console.log(`Publishing 'OFF' to topic: ${ledCommandTopic}`);
             
             client.publish(ledCommandTopic, JSON.stringify(offCommand), { qos: 1 });
-            
-            awaitingAck = true;
-            setButtonsEnabled(false);
-            statusElement.textContent = 'Waiting ESP response (ACK) for OFF...';
-            statusElement.style.color = 'orange';
-            if (ackTimeoutId) clearTimeout(ackTimeoutId);
-            ackTimeoutId = setTimeout(function () {
-                if (awaitingAck) {
-                    statusElement.textContent = 'No response from ESP yet. Please check device.';
-                    statusElement.style.color = 'red';
-                    alert('Zaman aşımı: ESP’den yanıt gelmedi (OFF). Lütfen cihazı kontrol edin.');
-                }
-            }, 7000);
         } else {
             console.error("Client not connected, cannot publish.");
-            alert("Hata: Bağlı değil veya ESP yanıtı bekleniyor.");
+            alert("Error: Not connected to the MQTT broker.");
         }
     });
 
