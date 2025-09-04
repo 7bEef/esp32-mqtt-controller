@@ -11,11 +11,6 @@
         .btn { padding: 20px 40px; font-size: 24px; cursor: pointer; border: none; color: white; border-radius: 8px; margin: 10px; }
         #btn-on { background-color: #4CAF50; } /* Green */
         #btn-off { background-color: #f44336; } /* Red */
-        .btn:disabled { background-color: #cccccc; cursor: not-allowed; opacity: 0.6; }
-        #command-status { margin-top: 20px; padding: 10px; border-radius: 5px; font-weight: bold; }
-        .status-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .status-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .status-pending { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
     </style>
 </head>
 <body>
@@ -24,7 +19,6 @@
     <p id="status">Connecting to MQTT Broker...</p>
     <button id="btn-on" class="btn">Turn ON</button>
     <button id="btn-off" class="btn">Turn OFF</button>
-    <div id="command-status" style="display: none;"></div>
 
 <script>
     // --- Configuration Section ---
@@ -38,31 +32,19 @@
     };
     
     const ledCommandTopic = 'esp32/led/command';
-    const ledStatusTopic = 'esp32/led/status';  // Yeni durum topic'i
     // --- End of Configuration ---
+
 
     // --- Application Logic (No need to edit) ---
     console.log("Attempting to connect with options:", options);
     const client = mqtt.connect(options);
 
     const statusElement = document.getElementById('status');
-    const btnOn = document.getElementById('btn-on');
-    const btnOff = document.getElementById('btn-off');
-    const commandStatus = document.getElementById('command-status');
-    
-    let isCommandPending = false;
 
     client.on('connect', function () {
         statusElement.textContent = 'Connected! Ready to send commands.';
         statusElement.style.color = 'green';
         console.log('Successfully connected to HiveMQ Broker!');
-        
-        // Durum bildirimlerini dinle
-        client.subscribe(ledStatusTopic, function (err) {
-            if (!err) {
-                console.log('Subscribed to status topic:', ledStatusTopic);
-            }
-        });
     });
 
     client.on('error', function (err) {
@@ -77,75 +59,32 @@
         statusElement.style.color = 'orange';
     });
 
-    // Durum bildirimlerini dinle
-    client.on('message', function (topic, message) {
-        if (topic === ledStatusTopic) {
-            try {
-                const statusData = JSON.parse(message.toString());
-                console.log('Status received:', statusData);
-                
-                if (statusData.status === 'completed') {
-                    showCommandStatus('Command completed successfully: ' + statusData.message, 'success');
-                    enableButtons();
-                } else if (statusData.status === 'failed') {
-                    showCommandStatus('Command failed: ' + statusData.message, 'error');
-                    enableButtons();
-                }
-            } catch (e) {
-                console.error('Error parsing status message:', e);
-            }
-        }
-    });
-
-    function disableButtons() {
-        btnOn.disabled = true;
-        btnOff.disabled = true;
-        isCommandPending = true;
-    }
-
-    function enableButtons() {
-        btnOn.disabled = false;
-        btnOff.disabled = false;
-        isCommandPending = false;
-    }
-
-    function showCommandStatus(message, type) {
-        commandStatus.textContent = message;
-        commandStatus.className = 'status-' + type;
-        commandStatus.style.display = 'block';
-        
-        // 5 saniye sonra durum mesajını gizle
-        setTimeout(() => {
-            commandStatus.style.display = 'none';
-        }, 5000);
-    }
-
-    function sendCommand(command) {
-        if (client.connected && !isCommandPending) {
-            const commandObj = {
-                "command": command
+    document.getElementById('btn-on').addEventListener('click', function () {
+        if (client.connected) {
+            const onCommand = {
+            "command":"ON"
             };
-            console.log(`Publishing '${command}' to topic: ${ledCommandTopic}`);
+            console.log(`Publishing 'ON' to topic: ${ledCommandTopic}`);
             
-            client.publish(ledCommandTopic, JSON.stringify(commandObj), { qos: 1 });
-            
-            // Butonları devre dışı bırak ve durum mesajı göster
-            disableButtons();
-            showCommandStatus('Command sent, waiting for response...', 'pending');
-        } else if (isCommandPending) {
-            alert("Please wait for the previous command to complete.");
+            client.publish(ledCommandTopic, JSON.stringify(onCommand), { qos: 1 });
         } else {
             console.error("Client not connected, cannot publish.");
             alert("Error: Not connected to the MQTT broker.");
         }
-    }
-
-    document.getElementById('btn-on').addEventListener('click', function () {
-        sendCommand('ON');
     });
 
     document.getElementById('btn-off').addEventListener('click', function () {
-        sendCommand('OFF');
+        if (client.connected) {
+            const offCommand = {
+            "command":"OFF"
+            };
+            console.log(`Publishing 'OFF' to topic: ${ledCommandTopic}`);
+            
+            client.publish(ledCommandTopic, JSON.stringify(offCommand), { qos: 1 });
+        } else {
+            console.error("Client not connected, cannot publish.");
+            alert("Error: Not connected to the MQTT broker.");
+        }
     });
 
 </script>
