@@ -1,24 +1,50 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ESP32 MQTT Controller</title>
+    <title>ESP32 Controller & OTA Updater</title>
     <!-- This line imports the official MQTT.js library -->
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; margin-top: 50px; background-color: #f4f4f4; }
+        body { font-family: sans-serif; text-align: center; margin-top: 30px; background-color: #f0f2f5; }
+        .container { background-color: white; max-width: 600px; margin: auto; padding: 20px 40px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         h1 { color: #333; }
-        #status { color: #555; font-style: italic; font-size: 18px; }
-        .btn { padding: 20px 40px; font-size: 24px; cursor: pointer; border: none; color: white; border-radius: 8px; margin: 10px; }
-        #btn-on { background-color: #4CAF50; } /* Green */
-        #btn-off { background-color: #f44336; } /* Red */
+        h2 { color: #555; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-top: 40px; }
+        #mqtt-status { font-style: italic; font-size: 16px; margin-bottom: 20px; }
+        .control-panel, .update-panel { margin-top: 20px; }
+        .btn { padding: 15px 30px; font-size: 20px; cursor: pointer; border: none; color: white; border-radius: 8px; margin: 10px; transition: background-color 0.3s; }
+        #btn-on { background-color: #28a745; } /* Green */
+        #btn-on:hover { background-color: #218838; }
+        #btn-off { background-color: #dc3545; } /* Red */
+        #btn-off:hover { background-color: #c82333; }
+        #btn-update { background-color: #007bff; } /* Blue */
+        #btn-update:hover { background-color: #0069d9; }
+        #firmware-file { display: block; margin: 20px auto; }
+        #upload-status { margin-top: 15px; font-style: italic; font-size: 16px; min-height: 20px; }
     </style>
 </head>
 <body>
 
-    <h1>ESP32 LED Control</h1>
-    <p id="status">Connecting to MQTT Broker...</p>
-    <button id="btn-on" class="btn">Turn ON</button>
-    <button id="btn-off" class="btn">Turn OFF</button>
+<div class="container">
+    <h1>ESP32 Universal Controller</h1>
+    <p id="mqtt-status">Connecting to MQTT Broker...</p>
+
+    <!-- Section for Real-time Commands -->
+    <div class="control-panel">
+        <h2>Live Commands</h2>
+        <button id="btn-on" class="btn">Turn ON</button>
+        <button id="btn-off" class="btn">Turn OFF</button>
+    </div>
+
+    <!-- Section for Firmware Update -->
+    <div class="update-panel">
+        <h2>Secure Firmware Update (STM32)</h2>
+        <form id="upload-form">
+            <input type="file" id="firmware-file" name="firmware" accept=".bin" required>
+            <button type="submit" id="btn-update" class="btn">Sign and Start Update</button>
+        </form>
+        <div id="upload-status">Select a firmware .bin file.</div>
+    </div>
+</div>
 
 <script>
     // --- Configuration Section ---
@@ -27,64 +53,97 @@
         port: 8884,
         protocol: 'wss',
         username: 'esp32device',
-        password: 'Password1', // Don't forget the comma on this line!
-        path: '/mqtt'          // Add this new line
+        password: 'Password1',
+        path: '/mqtt'
     };
-    
     const ledCommandTopic = 'esp32/led/command';
+    // The backend server URL for handling file uploads
+    const uploadUrl = 'http://127.0.0.1:5000/start_update';
     // --- End of Configuration ---
 
-
-    // --- Application Logic (No need to edit) ---
-    console.log("Attempting to connect with options:", options);
+    // --- MQTT Client Logic ---
     const client = mqtt.connect(options);
-
-    const statusElement = document.getElementById('status');
+    const mqttStatusElement = document.getElementById('mqtt-status');
 
     client.on('connect', function () {
-        statusElement.textContent = 'Connected! Ready to send commands.';
-        statusElement.style.color = 'green';
+        mqttStatusElement.textContent = 'Connected! Ready to send commands.';
+        mqttStatusElement.style.color = 'green';
         console.log('Successfully connected to HiveMQ Broker!');
     });
 
     client.on('error', function (err) {
-        statusElement.textContent = 'Error: Could not connect to broker. Check console for details.';
-        statusElement.style.color = 'red';
-        console.error('Connection error: ', err);
-        client.end();
+        mqttStatusElement.textContent = 'Error: Could not connect to MQTT. Check console.';
+        mqttStatusElement.style.color = 'red';
+        console.error('MQTT Connection error: ', err);
     });
     
-    client.on('reconnect', function () {
-        statusElement.textContent = 'Reconnecting...';
-        statusElement.style.color = 'orange';
-    });
-
     document.getElementById('btn-on').addEventListener('click', function () {
         if (client.connected) {
-            const onCommand = {
-            "command":"ON"
-            };
-            console.log(`Publishing 'ON' to topic: ${ledCommandTopic}`);
-            
-            client.publish(ledCommandTopic, JSON.stringify(onCommand), { qos: 1 });
+            client.publish(ledCommandTopic, JSON.stringify({"command":"ON"}), { qos: 1 });
+            console.log("Published 'ON' command.");
         } else {
-            console.error("Client not connected, cannot publish.");
             alert("Error: Not connected to the MQTT broker.");
         }
     });
 
     document.getElementById('btn-off').addEventListener('click', function () {
         if (client.connected) {
-            const offCommand = {
-            "command":"OFF"
-            };
-            console.log(`Publishing 'OFF' to topic: ${ledCommandTopic}`);
-            
-            client.publish(ledCommandTopic, JSON.stringify(offCommand), { qos: 1 });
+            client.publish(ledCommandTopic, JSON.stringify({"command":"OFF"}), { qos: 1 });
+            console.log("Published 'OFF' command.");
         } else {
-            console.error("Client not connected, cannot publish.");
             alert("Error: Not connected to the MQTT broker.");
         }
+    });
+
+
+    // --- Firmware Upload Logic ---
+    const uploadForm = document.getElementById('upload-form');
+    const fileInput = document.getElementById('firmware-file');
+    const uploadStatusElement = document.getElementById('upload-status');
+
+    uploadForm.addEventListener('submit', function(event) {
+        // Prevent the default browser action of submitting the form and reloading the page
+        event.preventDefault();
+        
+        if (fileInput.files.length === 0) {
+            uploadStatusElement.textContent = 'Please select a file first.';
+            uploadStatusElement.style.color = 'red';
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('firmware', fileInput.files[0]);
+
+        uploadStatusElement.textContent = 'Uploading and signing firmware... Please wait.';
+        uploadStatusElement.style.color = 'orange';
+
+        // Use the Fetch API to send the file to the Python backend
+        fetch(uploadUrl, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                // Handle server errors (like 500 Internal Server Error)
+                throw new Error(`Server responded with status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            // The Python server will respond with a JSON message
+            if (data.success) {
+                uploadStatusElement.textContent = data.message;
+                uploadStatusElement.style.color = 'green';
+            } else {
+                uploadStatusElement.textContent = 'Error: ' + data.message;
+                uploadStatusElement.style.color = 'red';
+            }
+        })
+        .catch(error => {
+            console.error('Upload Error:', error);
+            uploadStatusElement.textContent = 'Upload failed. Is the Python server running?';
+            uploadStatusElement.style.color = 'red';
+        });
     });
 
 </script>
