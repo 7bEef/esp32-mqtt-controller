@@ -1,149 +1,131 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ESP32 Controller & OTA Updater</title>
-    <!-- This line imports the official MQTT.js library -->
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <title>STM32 Secure OTA Updater</title>
     <style>
         body { font-family: sans-serif; text-align: center; margin-top: 30px; background-color: #f0f2f5; }
         .container { background-color: white; max-width: 600px; margin: auto; padding: 20px 40px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         h1 { color: #333; }
-        h2 { color: #555; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-top: 40px; }
-        #mqtt-status { font-style: italic; font-size: 16px; margin-bottom: 20px; }
-        .control-panel, .update-panel { margin-top: 20px; }
-        .btn { padding: 15px 30px; font-size: 20px; cursor: pointer; border: none; color: white; border-radius: 8px; margin: 10px; transition: background-color 0.3s; }
-        #btn-on { background-color: #28a745; } /* Green */
-        #btn-on:hover { background-color: #218838; }
-        #btn-off { background-color: #dc3545; } /* Red */
-        #btn-off:hover { background-color: #c82333; }
-        #btn-update { background-color: #007bff; } /* Blue */
-        #btn-update:hover { background-color: #0069d9; }
-        #firmware-file { display: block; margin: 20px auto; }
-        #upload-status { margin-top: 15px; font-style: italic; font-size: 16px; min-height: 20px; }
+        .panel { border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-top: 20px; }
+        h2 { color: #555; margin-top: 0; }
+        .btn { padding: 12px 25px; font-size: 16px; cursor: pointer; border: none; color: white; border-radius: 5px; margin: 5px; transition: background-color 0.3s, opacity 0.3s; }
+        .btn:disabled { background-color: #aaa; cursor: not-allowed; opacity: 0.7; }
+        #btn-upload { background-color: #007bff; } /* Blue */
+        #btn-send { background-color: #28a745; } /* Green */
+        .status-box { margin-top: 15px; font-style: italic; min-height: 22px; padding: 8px; border-radius: 4px; }
+        .success { color: #155724; background-color: #d4edda; }
+        .error { color: #721c24; background-color: #f8d7da; }
+        .info { color: #0c5460; background-color: #d1ecf1; }
     </style>
 </head>
 <body>
-
 <div class="container">
-    <h1>ESP32 Universal Controller</h1>
-    <p id="mqtt-status">Connecting to MQTT Broker...</p>
+    <h1>STM32 Secure OTA Updater</h1>
 
-    <!-- Section for Real-time Commands -->
-    <div class="control-panel">
-        <h2>Live Commands</h2>
-        <button id="btn-on" class="btn">Turn ON</button>
-        <button id="btn-off" class="btn">Turn OFF</button>
-    </div>
-
-    <!-- Section for Firmware Update -->
-    <div class="update-panel">
-        <h2>Secure Firmware Update (STM32)</h2>
+    <!-- Step 1: Upload Panel -->
+    <div class="panel">
+        <h2>Step 1: Upload & Sign Firmware</h2>
         <form id="upload-form">
             <input type="file" id="firmware-file" name="firmware" accept=".bin" required>
-            <button type="submit" id="btn-update" class="btn">Sign and Start Update</button>
+            <br><br>
+            <button type="submit" id="btn-upload" class="btn">Upload & Sign</button>
         </form>
-        <div id="upload-status">Select a firmware .bin file.</div>
+        <div id="upload-status" class="status-box info">Select a firmware .bin file.</div>
+    </div>
+
+    <!-- Step 2: Send Notification Panel -->
+    <div class="panel">
+        <h2>Step 2: Send OTA Notification</h2>
+        <button id="btn-send" class="btn" disabled>Send to Device</button>
+        <div id="send-status" class="status-box">Awaiting file upload.</div>
     </div>
 </div>
 
 <script>
-    // --- Configuration Section ---
-    const options = {
-        host: 'c09dd17c3820439c8e3313d2b9acf071.s1.eu.hivemq.cloud',
-        port: 8884,
-        protocol: 'wss',
-        username: 'esp32device',
-        password: 'Password1',
-        path: '/mqtt'
-    };
-    const ledCommandTopic = 'esp32/led/command';
-    // The backend server URL for handling file uploads
-    const uploadUrl = 'http://127.0.0.1:5000/start_update';
-    // --- End of Configuration ---
-
-    // --- MQTT Client Logic ---
-    const client = mqtt.connect(options);
-    const mqttStatusElement = document.getElementById('mqtt-status');
-
-    client.on('connect', function () {
-        mqttStatusElement.textContent = 'Connected! Ready to send commands.';
-        mqttStatusElement.style.color = 'green';
-        console.log('Successfully connected to HiveMQ Broker!');
-    });
-
-    client.on('error', function (err) {
-        mqttStatusElement.textContent = 'Error: Could not connect to MQTT. Check console.';
-        mqttStatusElement.style.color = 'red';
-        console.error('MQTT Connection error: ', err);
-    });
-    
-    document.getElementById('btn-on').addEventListener('click', function () {
-        if (client.connected) {
-            client.publish(ledCommandTopic, JSON.stringify({"command":"ON"}), { qos: 1 });
-            console.log("Published 'ON' command.");
-        } else {
-            alert("Error: Not connected to the MQTT broker.");
-        }
-    });
-
-    document.getElementById('btn-off').addEventListener('click', function () {
-        if (client.connected) {
-            client.publish(ledCommandTopic, JSON.stringify({"command":"OFF"}), { qos: 1 });
-            console.log("Published 'OFF' command.");
-        } else {
-            alert("Error: Not connected to the MQTT broker.");
-        }
-    });
-
-
-    // --- Firmware Upload Logic ---
     const uploadForm = document.getElementById('upload-form');
     const fileInput = document.getElementById('firmware-file');
-    const uploadStatusElement = document.getElementById('upload-status');
+    const uploadBtn = document.getElementById('btn-upload');
+    const sendBtn = document.getElementById('btn-send');
+    const uploadStatusDiv = document.getElementById('upload-status');
+    const sendStatusDiv = document.getElementById('send-status');
 
+    // --- Event Listener for Upload Form ---
     uploadForm.addEventListener('submit', function(event) {
-        // Prevent the default browser action of submitting the form and reloading the page
         event.preventDefault();
-        
         if (fileInput.files.length === 0) {
-            uploadStatusElement.textContent = 'Please select a file first.';
-            uploadStatusElement.style.color = 'red';
+            updateStatus(uploadStatusDiv, 'Please select a file first.', 'error');
             return;
         }
 
         const formData = new FormData();
         formData.append('firmware', fileInput.files[0]);
+        updateStatus(uploadStatusDiv, 'Uploading and signing... Please wait.', 'info');
+        uploadBtn.disabled = true;
 
-        uploadStatusElement.textContent = 'Uploading and signing firmware... Please wait.';
-        uploadStatusElement.style.color = 'orange';
-
-        // Use the Fetch API to send the file to the Python backend
-        fetch(uploadUrl, {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => {
-            if (!response.ok) {
-                // Handle server errors (like 500 Internal Server Error)
-                throw new Error(`Server responded with status: ${response.status}`);
-            }
-            return response.json();
-        })
+        fetch('/upload_firmware', { method: 'POST', body: formData })
+        .then(response => response.json())
         .then(data => {
-            // The Python server will respond with a JSON message
             if (data.success) {
-                uploadStatusElement.textContent = data.message;
-                uploadStatusElement.style.color = 'green';
+                updateStatus(uploadStatusDiv, data.message, 'success');
+                updateStatus(sendStatusDiv, `Ready to send update for '${data.metadata.filename}'`, 'info');
+                sendBtn.disabled = false; // Enable the send button
             } else {
-                uploadStatusElement.textContent = 'Error: ' + data.message;
-                uploadStatusElement.style.color = 'red';
+                updateStatus(uploadStatusDiv, 'Error: ' + data.message, 'error');
             }
         })
         .catch(error => {
             console.error('Upload Error:', error);
-            uploadStatusElement.textContent = 'Upload failed. Is the Python server running?';
-            uploadStatusElement.style.color = 'red';
+            updateStatus(uploadStatusDiv, 'Upload failed. Is the Python server running?', 'error');
+        })
+        .finally(() => {
+            uploadBtn.disabled = false; // Re-enable upload button
         });
+    });
+
+    // --- Event Listener for Send Button ---
+    sendBtn.addEventListener('click', function() {
+        updateStatus(sendStatusDiv, 'Sending notification to device via MQTT...', 'info');
+        sendBtn.disabled = true;
+
+        fetch('/send_notification', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateStatus(sendStatusDiv, data.message, 'success');
+            } else {
+                updateStatus(sendStatusDiv, 'Error: ' + data.message, 'error');
+                sendBtn.disabled = false; // Re-enable on failure
+            }
+        })
+        .catch(error => {
+            console.error('Send Error:', error);
+            updateStatus(sendStatusDiv, 'Failed to send. Is the Python server running?', 'error');
+            sendBtn.disabled = false; // Re-enable on failure
+        });
+    });
+    
+    // --- Helper function to update status divs ---
+    function updateStatus(element, message, type) {
+        element.textContent = message;
+        element.className = 'status-box'; // Reset classes
+        if (type) {
+            element.classList.add(type);
+        }
+    }
+
+    // --- Initial Status Check on Page Load ---
+    // Checks if a file is already prepared on the server from a previous session
+    window.addEventListener('load', function() {
+        fetch('/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.file_ready) {
+                    console.log('Server has a file ready from a previous session.', data.metadata);
+                    updateStatus(uploadStatusDiv, `A previous file is ready: '${data.metadata.filename}'`, 'success');
+                    updateStatus(sendStatusDiv, 'Ready to send the previously uploaded update.', 'info');
+                    sendBtn.disabled = false;
+                }
+            });
     });
 
 </script>
